@@ -120,7 +120,7 @@ public final class Seed {
     for (int i = 1; i <= PACKAGE_COUNT; i++) {
       packages.add(new Package(
           i,
-          String.format("LOLA-%04d", i),
+          String.format("PKGLOG-%04d", i),
           routes.get(random.nextInt(routes.size())).id(),
           0.5f + random.nextInt(195) / 10f,
           1_500L + random.nextInt(58_501),

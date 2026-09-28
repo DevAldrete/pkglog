@@ -1,9 +1,12 @@
 package com.dev.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,14 +16,16 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 
 import com.dev.domain.DeliveryStatus;
 import com.dev.domain.Package;
 import com.dev.domain.Priority;
+import com.dev.ds.HashMap;
 import com.dev.modules.Deliveries;
 
-/** Urgent dispatch: priority breakdown and extraction of the next shipment. */
+/** Deadline-aware urgent dispatch: priority breakdown and next shipment. */
 public final class DispatchPanel extends JPanel implements Refreshable {
 
   private static final long serialVersionUID = 1L;
@@ -28,9 +33,13 @@ public final class DispatchPanel extends JPanel implements Refreshable {
   private final transient Store store;
 
   private final DefaultTableModel model;
+  private final JTable table;
   private final JLabel message = new JLabel(" ");
   private final JLabel[] priorityCounts = new JLabel[Priority.values().length];
   private final JLabel pendingValue = new JLabel();
+  private final JLabel overdueValue = new JLabel();
+
+  private HashMap<String, Boolean> overdueWaybills = new HashMap<>(16);
 
   public DispatchPanel(Store store) {
     this.store = store;
@@ -39,7 +48,7 @@ public final class DispatchPanel extends JPanel implements Refreshable {
     setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
     model = new DefaultTableModel(
-        new Object[] { "Guía", "Ruta", "Prioridad", "Peso", "Estado" }, 0) {
+        new Object[] { "Guía", "Ruta", "Prioridad", "Peso", "Estado", "Límite" }, 0) {
       private static final long serialVersionUID = 1L;
 
       @Override
@@ -48,15 +57,36 @@ public final class DispatchPanel extends JPanel implements Refreshable {
       }
     };
 
-    JTable table = new JTable(model);
+    table = new JTable(model);
     table.setRowHeight(24);
     table.getTableHeader().setReorderingAllowed(false);
+    table.setDefaultRenderer(Object.class, overdueRenderer());
 
     add(buildPriorityBar(), BorderLayout.NORTH);
     add(new JScrollPane(table), BorderLayout.CENTER);
     add(buildActionBar(), BorderLayout.SOUTH);
 
     refresh();
+  }
+
+  private DefaultTableCellRenderer overdueRenderer() {
+    return new DefaultTableCellRenderer() {
+      private static final long serialVersionUID = 1L;
+
+      @Override
+      public Component getTableCellRendererComponent(JTable source, Object value, boolean selected,
+          boolean focused, int row, int column) {
+        Component component = super.getTableCellRendererComponent(source, value, selected, focused,
+            row, column);
+        String waybill = String.valueOf(model.getValueAt(source.convertRowIndexToModel(row), 0));
+
+        if (!selected) {
+          component.setForeground(overdueWaybills.containsKey(waybill) ? Color.RED : Color.BLACK);
+        }
+
+        return component;
+      }
+    };
   }
 
   private JPanel buildPriorityBar() {
@@ -80,6 +110,9 @@ public final class DispatchPanel extends JPanel implements Refreshable {
     JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
     header.add(new JLabel("Pendientes de despacho:"));
     header.add(pendingValue);
+    header.add(new JLabel("   |   Vencidos:"));
+    overdueValue.setForeground(Color.RED);
+    header.add(overdueValue);
 
     panel.add(header, BorderLayout.NORTH);
     panel.add(counts, BorderLayout.CENTER);
@@ -105,8 +138,15 @@ public final class DispatchPanel extends JPanel implements Refreshable {
           .setText(String.valueOf(Deliveries.countByPriority(store.packages(), priority)));
     }
 
+    LocalDateTime now = LocalDateTime.now();
     List<Package> pending = pendingPackages();
     pendingValue.setText(String.valueOf(pending.size()));
+
+    overdueWaybills = new HashMap<>(16);
+    for (Package pkg : Deliveries.overdue(store.packages(), now)) {
+      overdueWaybills.put(pkg.idGuia(), true);
+    }
+    overdueValue.setText(String.valueOf(overdueWaybills.size()));
 
     model.setRowCount(0);
     for (Package pkg : Deliveries.sortByPriority(pending)) {
@@ -115,7 +155,8 @@ public final class DispatchPanel extends JPanel implements Refreshable {
           store.routeDescription(pkg.routeId()),
           pkg.priority().level() + " - " + pkg.priority().name(),
           Format.weight(pkg.weight()),
-          pkg.status() });
+          pkg.status(),
+          Format.dateTime(pkg.deadline()) });
     }
   }
 
@@ -127,12 +168,12 @@ public final class DispatchPanel extends JPanel implements Refreshable {
       return;
     }
 
-    store.setPackages(dispatch.packages());
+    store.applyDispatch(dispatch);
     refresh();
 
     Package pkg = dispatch.dispatched();
     message.setText("Despachado " + pkg.idGuia() + " (prioridad " + pkg.priority().level()
-        + ") -> " + pkg.status());
+        + ", límite " + Format.dateTime(pkg.deadline()) + ") -> " + pkg.status());
   }
 
   private List<Package> pendingPackages() {

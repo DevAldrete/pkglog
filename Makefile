@@ -1,8 +1,8 @@
-# Logistics Oriented Language Assistant
+# PkgLog - Sistema de Gestión de Logística y Envíos
 MVN      ?= mvn
 VERSION   = $(shell $(MVN) -q -DforceStdout help:evaluate -Dexpression=project.version 2>/dev/null)
-JAR       = target/lola-$(VERSION).jar
-MAIN     := com.dev.lola.App
+JAR       = target/pkglog-$(VERSION).jar
+MAIN     := com.dev.pkglog.App
 
 .DEFAULT_GOAL := help
 .PHONY: help compile test package run run-jar clean rebuild

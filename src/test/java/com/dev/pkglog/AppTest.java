@@ -1,4 +1,4 @@
-package com.dev.lola;
+package com.dev.pkglog;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

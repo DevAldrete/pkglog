@@ -1,4 +1,4 @@
-package com.dev.lola;
+package com.dev.pkglog;
 
 import java.time.Duration;
 import java.time.LocalDateTime;

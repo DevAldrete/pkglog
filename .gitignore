@@ -1,4 +1,11 @@
 target/
+
+# Local SQLite database and journals
+pkglog.db
+pkglog.db-journal
+pkglog.db-wal
+pkglog.db-shm
+
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup

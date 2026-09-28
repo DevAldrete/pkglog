@@ -1,5 +1,6 @@
 package com.dev.modules;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -84,17 +85,26 @@ public final class Deliveries {
   public static Optional<Dispatch> dispatchNext(List<Package> packages) {
     Objects.requireNonNull(packages, "packages must not be null");
 
-    // Un bucket por nivel de prioridad: extracción del máximo en O(1), FIFO en empates.
-    BucketQueue<Package> queue = new BucketQueue<>(Priority.CRITICAL.level());
+    List<Package> candidates = new ArrayList<>();
 
     for (Package pkg : packages) {
       if (isDispatchable(pkg.status())) {
-        queue.enqueue(pkg, pkg.priority().level());
+        candidates.add(pkg);
       }
     }
 
-    if (queue.isEmpty()) {
+    if (candidates.isEmpty()) {
       return Optional.empty();
+    }
+
+    // Deadline-aware: enqueue in earliest-deadline order so the per-priority
+    // FIFO bucket serves the most urgent due date first within each level.
+    List<Package> byDeadline = Sorting.mergeSort(candidates, BY_DEADLINE);
+
+    BucketQueue<Package> queue = new BucketQueue<>(Priority.CRITICAL.level());
+
+    for (Package pkg : byDeadline) {
+      queue.enqueue(pkg, pkg.priority().level());
     }
 
     Package next = queue.dequeueMax();
@@ -105,6 +115,33 @@ public final class Deliveries {
 
   private static boolean isDispatchable(DeliveryStatus status) {
     return status == DeliveryStatus.CREATED || status == DeliveryStatus.DISPATCHED;
+  }
+
+  private static boolean isActive(DeliveryStatus status) {
+    return status == DeliveryStatus.CREATED
+        || status == DeliveryStatus.DISPATCHED
+        || status == DeliveryStatus.IN_TRANSIT;
+  }
+
+  /** Active packages whose deadline has already passed. */
+  public static List<Package> overdue(List<Package> packages, LocalDateTime now) {
+    Objects.requireNonNull(packages, "packages must not be null");
+    Objects.requireNonNull(now, "now must not be null");
+
+    List<Package> result = new ArrayList<>();
+
+    for (Package pkg : packages) {
+      if (isActive(pkg.status()) && pkg.deadline().isBefore(now)) {
+        result.add(pkg);
+      }
+    }
+
+    return result;
+  }
+
+  /** Number of active packages past their deadline. */
+  public static int overdueCount(List<Package> packages, LocalDateTime now) {
+    return overdue(packages, now).size();
   }
 
   // ---------------------------------------------------------------------------

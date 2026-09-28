@@ -166,8 +166,9 @@ public final class ReportsPanel extends JPanel implements Refreshable {
     StringBuilder text = new StringBuilder();
 
     line(text, "Paquetes", String.valueOf(store.packages().size()));
-    line(text, "Ingresos", Format.money(Analytics.revenueInCents(store.packages())));
-    line(text, "Peso total", Format.weight(Deliveries.totalWeight(store.packages())));
+    line(text, "Ingresos (sin cancelados)", Format.money(Analytics.revenueInCents(store.packages())));
+    line(text, "Ingresos entregados", Format.money(Analytics.deliveredRevenueInCents(store.packages())));
+    line(text, "Peso total", Format.weight(Analytics.totalWeight(store.packages())));
     line(text, "Rutas", String.valueOf(store.routes().size()));
     line(text, "Costo de rutas", Format.money(Analytics.totalExpense(store.routes())));
     line(text, "Distancia de red", Format.distance(Analytics.totalDistance(store.routes())));

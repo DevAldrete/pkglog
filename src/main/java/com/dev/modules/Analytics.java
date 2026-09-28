@@ -94,17 +94,56 @@ public final class Analytics {
   // Paquetes: ingresos, promedios y conteos.
   // ---------------------------------------------------------------------------
 
-  /** Sums the price of every package, in cents. */
+  /**
+   * Sums the price of every billable package, in cents. Canceled shipments are
+   * excluded so the figure matches actual expected revenue.
+   */
   public static long revenueInCents(List<Package> packages) {
     Objects.requireNonNull(packages, "packages must not be null");
 
     long total = 0L;
 
     for (Package pkg : packages) {
-      total += pkg.priceInCents();
+      if (isBillable(pkg)) {
+        total += pkg.priceInCents();
+      }
     }
 
     return total;
+  }
+
+  /** Sums the price of delivered packages only, in cents. */
+  public static long deliveredRevenueInCents(List<Package> packages) {
+    Objects.requireNonNull(packages, "packages must not be null");
+
+    long total = 0L;
+
+    for (Package pkg : packages) {
+      if (pkg.status() == DeliveryStatus.DELIVERED) {
+        total += pkg.priceInCents();
+      }
+    }
+
+    return total;
+  }
+
+  /** Sums the weight of billable (non-canceled) packages, in kilograms. */
+  public static float totalWeight(List<Package> packages) {
+    Objects.requireNonNull(packages, "packages must not be null");
+
+    float total = 0f;
+
+    for (Package pkg : packages) {
+      if (isBillable(pkg)) {
+        total += pkg.weight();
+      }
+    }
+
+    return total;
+  }
+
+  private static boolean isBillable(Package pkg) {
+    return pkg.status() != DeliveryStatus.CANCELED;
   }
 
   /** Averages the package price, in cents, or empty when there are no packages. */
@@ -154,6 +193,10 @@ public final class Analytics {
     HashMap<Integer, Long> revenue = new HashMap<>(Math.max(packages.size() * 2, 2));
 
     for (Package pkg : packages) {
+      if (!isBillable(pkg)) {
+        continue;
+      }
+
       Long current = revenue.get(pkg.routeId());
       revenue.put(pkg.routeId(), current == null ? pkg.priceInCents() : current + pkg.priceInCents());
     }

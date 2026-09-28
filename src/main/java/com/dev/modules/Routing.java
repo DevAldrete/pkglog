@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import com.dev.domain.DeliveryStatus;
 import com.dev.domain.Package;
 import com.dev.domain.Route;
 import com.dev.domain.Vehicle;
@@ -35,6 +36,32 @@ public final class Routing {
 
   /** A load assigned to a vehicle by the partitioning algorithm. */
   public record Assignment(Vehicle vehicle, List<Package> packages, float totalWeight) {
+
+    /** True when the assigned load exceeds the vehicle capacity. */
+    public boolean overCapacity() {
+      return totalWeight > vehicle.capacityKg();
+    }
+  }
+
+  /**
+   * Result of planning a batch against the fleet: the loads that fit and the
+   * packages that no vehicle can carry.
+   */
+  public record Plan(List<Assignment> assignments, List<Package> unassigned) {
+
+    public int assignedCount() {
+      int total = 0;
+
+      for (Assignment assignment : assignments) {
+        total += assignment.packages().size();
+      }
+
+      return total;
+    }
+
+    public boolean isFullyAssigned() {
+      return unassigned.isEmpty();
+    }
   }
 
   /** Sorts routes from cheapest to most expensive, in cents. */
@@ -230,20 +257,40 @@ public final class Routing {
 
   /**
    * Splits the batch into at most one segment per vehicle and pairs the
-   * heaviest segment with the largest vehicle. Returns an empty list when
-   * there is nothing to assign.
+   * heaviest segment with the largest vehicle. Returns just the loads; see
+   * {@link #plan(List, List)} to learn which packages could not be carried.
    */
   public static List<Assignment> partitionDeliveries(List<Package> packages, List<Vehicle> vehicles) {
+    return plan(packages, vehicles).assignments();
+  }
+
+  /**
+   * Capacity-aware fleet plan. Dispatchable packages are split between the
+   * vehicles with the same divide-and-conquer balancing as
+   * {@link #partitionDeliveries(List, List)}, then any load that overflows its
+   * vehicle is trimmed and the removed packages are re-tried against the
+   * remaining capacity. Packages that fit nowhere are returned as unassigned
+   * instead of silently overloading a truck.
+   */
+  public static Plan plan(List<Package> packages, List<Vehicle> vehicles) {
     Objects.requireNonNull(packages, "packages must not be null");
     Objects.requireNonNull(vehicles, "vehicles must not be null");
 
-    if (packages.isEmpty() || vehicles.isEmpty()) {
-      return List.of();
+    List<Package> batch = new ArrayList<>();
+
+    for (Package pkg : packages) {
+      if (isDispatchable(pkg.status())) {
+        batch.add(pkg);
+      }
+    }
+
+    if (batch.isEmpty() || vehicles.isEmpty()) {
+      return new Plan(List.of(), List.of());
     }
 
     List<List<Package>> segments = new ArrayList<>();
 
-    for (List<Package> segment : divide(new ArrayList<>(packages), vehicles.size())) {
+    for (List<Package> segment : divide(batch, vehicles.size())) {
       if (!segment.isEmpty()) {
         segments.add(segment);
       }
@@ -254,15 +301,80 @@ public final class Routing {
     List<List<Package>> orderedSegments = Sorting.mergeSort(segments,
         Comparator.comparingDouble(Routing::segmentWeight).reversed());
 
-    List<Assignment> assignments = new ArrayList<>();
-    int count = Math.min(orderedVehicles.size(), orderedSegments.size());
-
-    for (int i = 0; i < count; i++) {
-      List<Package> segment = orderedSegments.get(i);
-      assignments.add(new Assignment(orderedVehicles.get(i), segment, (float) segmentWeight(segment)));
+    // One load slot per vehicle, aligned with orderedVehicles.
+    List<List<Package>> loads = new ArrayList<>(orderedVehicles.size());
+    for (int i = 0; i < orderedVehicles.size(); i++) {
+      loads.add(new ArrayList<>());
     }
 
-    return assignments;
+    int paired = Math.min(orderedVehicles.size(), orderedSegments.size());
+    for (int i = 0; i < paired; i++) {
+      loads.set(i, new ArrayList<>(orderedSegments.get(i)));
+    }
+
+    // Trim each load to its vehicle capacity, pooling whatever does not fit.
+    List<Package> overflow = new ArrayList<>();
+
+    for (int i = 0; i < loads.size(); i++) {
+      List<Package> kept = new ArrayList<>();
+      float capacity = orderedVehicles.get(i).capacityKg();
+      float sum = 0f;
+
+      for (Package pkg : Sorting.mergeSort(loads.get(i),
+          Comparator.comparingDouble(Package::weight).reversed())) {
+        if (sum + pkg.weight() <= capacity) {
+          kept.add(pkg);
+          sum += pkg.weight();
+        } else {
+          overflow.add(pkg);
+        }
+      }
+
+      loads.set(i, kept);
+    }
+
+    // Best-fit-decreasing of the pool against the remaining capacity.
+    float[] remaining = new float[orderedVehicles.size()];
+    for (int i = 0; i < orderedVehicles.size(); i++) {
+      remaining[i] = orderedVehicles.get(i).capacityKg() - (float) segmentWeight(loads.get(i));
+    }
+
+    List<Package> unassigned = new ArrayList<>();
+
+    for (Package pkg : Sorting.mergeSort(overflow,
+        Comparator.comparingDouble(Package::weight).reversed())) {
+      int best = -1;
+      float bestRemaining = Float.MAX_VALUE;
+
+      for (int i = 0; i < orderedVehicles.size(); i++) {
+        if (pkg.weight() <= remaining[i] && remaining[i] < bestRemaining) {
+          best = i;
+          bestRemaining = remaining[i];
+        }
+      }
+
+      if (best < 0) {
+        unassigned.add(pkg);
+      } else {
+        loads.get(best).add(pkg);
+        remaining[best] -= pkg.weight();
+      }
+    }
+
+    List<Assignment> assignments = new ArrayList<>();
+
+    for (int i = 0; i < orderedVehicles.size(); i++) {
+      if (!loads.get(i).isEmpty()) {
+        assignments.add(new Assignment(orderedVehicles.get(i), loads.get(i),
+            (float) segmentWeight(loads.get(i))));
+      }
+    }
+
+    return new Plan(assignments, unassigned);
+  }
+
+  private static boolean isDispatchable(DeliveryStatus status) {
+    return status == DeliveryStatus.CREATED || status == DeliveryStatus.DISPATCHED;
   }
 
   // Divide el lote en tantos segmentos como partes solicitadas.

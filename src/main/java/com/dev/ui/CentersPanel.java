@@ -3,8 +3,6 @@ package com.dev.ui;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.util.ArrayList;
-import java.util.List;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -151,9 +149,7 @@ public final class CentersPanel extends JPanel implements Refreshable {
       String plate = plateField.getText().trim();
       float capacity = Float.parseFloat(capacityField.getText().trim());
 
-      List<Vehicle> vehicles = new ArrayList<>(store.vehicles());
-      vehicles.add(new Vehicle(id, plate, capacity));
-      store.setVehicles(vehicles);
+      store.saveVehicle(new Vehicle(id, plate, capacity));
 
       idField.setText("");
       plateField.setText("");

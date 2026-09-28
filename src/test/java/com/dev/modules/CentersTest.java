@@ -1,6 +1,6 @@
 package com.dev.modules;
 
-import static com.dev.lola.Fixtures.center;
+import static com.dev.pkglog.Fixtures.center;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 

@@ -1,10 +1,11 @@
 package com.dev.modules;
 
-import static com.dev.lola.Fixtures.pkg;
-import static com.dev.lola.Fixtures.route;
-import static com.dev.lola.Fixtures.vehicle;
-import static com.dev.lola.Fixtures.zone;
+import static com.dev.pkglog.Fixtures.pkg;
+import static com.dev.pkglog.Fixtures.route;
+import static com.dev.pkglog.Fixtures.vehicle;
+import static com.dev.pkglog.Fixtures.zone;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
@@ -181,6 +182,35 @@ class RoutingTest {
 
     int assigned = assignments.stream().mapToInt(a -> a.packages().size()).sum();
     assertEquals(packages.size(), assigned);
+  }
+
+  @Test
+  void planRespectsCapacityAndReportsUnassigned() {
+    List<Package> packages = List.of(
+        pkg(1, "WB-HEAVY", 1, 5_000f, 100, Priority.NORMAL, DeliveryStatus.CREATED),
+        pkg(2, "WB-LIGHT", 1, 100f, 100, Priority.NORMAL, DeliveryStatus.CREATED));
+
+    List<Vehicle> vehicles = List.of(vehicle(1, "AAA-0001", 1_000f));
+
+    Routing.Plan plan = Routing.plan(packages, vehicles);
+
+    assertEquals(1, plan.assignments().size());
+    assertEquals(100f, plan.assignments().get(0).totalWeight(), 0.001f);
+    assertFalse(plan.assignments().get(0).overCapacity());
+    assertEquals(1, plan.unassigned().size());
+    assertEquals("WB-HEAVY", plan.unassigned().get(0).idGuia());
+  }
+
+  @Test
+  void planOnlyConsidersDispatchablePackages() {
+    List<Package> packages = List.of(
+        pkg(1, "WB-DONE", 1, 1f, 100, Priority.NORMAL, DeliveryStatus.DELIVERED),
+        pkg(2, "WB-LIVE", 1, 1f, 100, Priority.NORMAL, DeliveryStatus.CREATED));
+
+    Routing.Plan plan = Routing.plan(packages, List.of(vehicle(1, "AAA-0001", 100f)));
+
+    assertEquals(1, plan.assignedCount());
+    assertTrue(plan.isFullyAssigned());
   }
 
   @Test

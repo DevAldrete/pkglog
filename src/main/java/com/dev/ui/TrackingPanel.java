@@ -236,10 +236,11 @@ public final class TrackingPanel extends JPanel implements Refreshable {
       return;
     }
 
-    store.setPackages(Deliveries.updateStatus(store.packages(), pkg.idGuia(), status));
+    store.updatePackageStatus(pkg.idGuia(), status);
     refresh();
     selectByWaybill(pkg.idGuia());
-    detail.setText(describe(Deliveries.indexByWaybill(store.packages()).get(pkg.idGuia())));
+    Deliveries.findByWaybill(Deliveries.indexByWaybill(store.packages()), pkg.idGuia())
+        .ifPresent(found -> detail.setText(describe(found)));
     message.setText(pkg.idGuia() + " -> " + status);
   }
 
