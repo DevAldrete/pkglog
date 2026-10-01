@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 
 import com.dev.domain.CenterLevel;
@@ -28,6 +29,14 @@ public final class Seed {
   private static final long RANDOM_SEED = 42L;
   private static final int PACKAGE_COUNT = 60;
   private static final LocalDateTime BASE_DEADLINE = LocalDateTime.of(2026, 6, 1, 18, 0);
+
+  /**
+   * Day offsets applied to the anchor deadline, so a baseline always shows a
+   * realistic mix: a few shipments past due (highlighted red) and most still
+   * within their window.
+   */
+  private static final int DEADLINE_MIN_OFFSET = -4;
+  private static final int DEADLINE_SPAN = 20;
 
   private static final DeliveryStatus[] STATUSES = {
       DeliveryStatus.CREATED,
@@ -113,6 +122,21 @@ public final class Seed {
   }
 
   public static List<Package> packages() {
+    return packages(BASE_DEADLINE);
+  }
+
+  /**
+   * Generates the deterministic baseline with deadlines computed relative to
+   * {@code baseDeadline}. Callers that want fresh demo data pass
+   * {@link LocalDateTime#now()}; tests pass a fixed instant to stay
+   * reproducible.
+   *
+   * <p>The random sequence is unchanged relative to the fixed anchor, so the
+   * rest of the fields remain identical for a given {@code baseDeadline}.
+   */
+  public static List<Package> packages(LocalDateTime baseDeadline) {
+    Objects.requireNonNull(baseDeadline, "baseDeadline must not be null");
+
     Random random = new Random(RANDOM_SEED);
     List<Route> routes = routes();
     List<Package> packages = new ArrayList<>(PACKAGE_COUNT);
@@ -124,7 +148,7 @@ public final class Seed {
           routes.get(random.nextInt(routes.size())).id(),
           0.5f + random.nextInt(195) / 10f,
           1_500L + random.nextInt(58_501),
-          BASE_DEADLINE.plusDays(1 + random.nextInt(10)),
+          baseDeadline.plusDays(DEADLINE_MIN_OFFSET + random.nextInt(DEADLINE_SPAN)),
           Priority.values()[random.nextInt(Priority.values().length)],
           STATUSES[random.nextInt(STATUSES.length)]));
     }

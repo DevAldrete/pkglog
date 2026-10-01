@@ -36,6 +36,7 @@ public final class Store {
   public Store(Repositories repositories) {
     this.repositories = repositories;
     Seeder.seedIfEmpty(repositories);
+    Seeder.refreshStaleSeedDeadlines(repositories, LocalDateTime.now());
     reload();
   }
 

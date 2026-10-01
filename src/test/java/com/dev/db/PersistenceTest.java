@@ -56,6 +56,45 @@ class PersistenceTest {
   }
 
   @Test
+  void staleSeedDeadlinesAreRefreshedWithoutTouchingOperatorData() {
+    Seeder.seedIfEmpty(repositories);
+
+    LocalDateTime now = LocalDateTime.of(2026, 10, 1, 12, 0);
+
+    // Simulate a baseline seeded months ago: every deadline aged out.
+    for (Package pkg : repositories.packages().findAll()) {
+      repositories.packages().save(pkg.withDeadline(now.minusMonths(4)));
+    }
+
+    Package operatorPackage = new Package(repositories.packages().nextId(), "WB-MANUAL", 1, 2f,
+        1_000L, now.minusDays(30), Priority.NORMAL, DeliveryStatus.CREATED);
+    repositories.packages().save(operatorPackage);
+
+    int refreshed = Seeder.refreshStaleSeedDeadlines(repositories, now);
+
+    assertTrue(refreshed > 0, "stale baseline should be rewritten");
+    assertEquals(now.minusDays(30),
+        repositories.packages().findByWaybill("WB-MANUAL").orElseThrow().deadline(),
+        "operator data must be untouched");
+
+    long future = repositories.packages().findAll().stream()
+        .filter(pkg -> pkg.idGuia().startsWith("PKGLOG-"))
+        .filter(pkg -> pkg.deadline().isAfter(now))
+        .count();
+    assertTrue(future > 0, "some baseline deadlines should be back in the future");
+
+    // Once refreshed the baseline is fresh and must not be rewritten again.
+    assertEquals(0, Seeder.refreshStaleSeedDeadlines(repositories, now));
+  }
+
+  @Test
+  void freshlySeededDeadlinesAreNotStale() {
+    Seeder.seedIfEmpty(repositories);
+
+    assertEquals(0, Seeder.refreshStaleSeedDeadlines(repositories, LocalDateTime.now()));
+  }
+
+  @Test
   void zoneRoundTripsThroughTheDatabase() {
     Zone saved = new Zone(99, "AM", "Manaus");
     repositories.zones().save(saved);

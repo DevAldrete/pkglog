@@ -44,4 +44,8 @@ public record Package(
   public Package withStatus(DeliveryStatus status) {
     return new Package(id, waybill, routeId, weight, priceInCents, deadline, priority, status);
   }
+
+  public Package withDeadline(LocalDateTime deadline) {
+    return new Package(id, waybill, routeId, weight, priceInCents, deadline, priority, status);
+  }
 }

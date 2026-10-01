@@ -43,7 +43,11 @@ Las contraseñas se guardan como hash PBKDF2-HMAC-SHA256 con sal; nunca en claro
 
 - Los datos viven en `pkglog.db` (SQLite) junto al directorio de trabajo. El
   archivo se crea solo y se llena con datos de ejemplo deterministas la primera
-  vez que se abre.
+  vez que se abre. Las fechas límite de la semilla se calculan **relativas a la
+  fecha de arranque**, dejando algunos envíos vencidos y la mayoría vigentes.
+- Al abrir, si **todos** los paquetes activos sembrados ya están vencidos (p. ej.
+  una base creada hace meses), `Seeder.refreshStaleSeedDeadlines` recalcula sus
+  fechas límite sin tocar ids, estados ni datos creados por el operador.
 - El esquema se declara en `com.dev.db.Schema`; cada tabla del dominio tiene su
   puerto de repositorio (`com.dev.db.repo`) y su adaptador JDBC
   (`com.dev.db.jdbc`) detrás de la fachada `Repositories`.
